@@ -1,0 +1,502 @@
+
+
+
+Shade.c -A demonstration of 3D transformations and
+simple Phong shading.
+
+I wrote this program, and some of this file, as a project for a
+graphics class years ago.  I re-wrote it for the Amiga several
+years later and planned to submit it to a magazine, but never
+got around to it.  Now, at least a year later, I decided to
+finish it up and push it out of the nest.
+
+This program demonstrates a couple of common techniques for 3D
+graphics.  Anyone who has also taken a decent graphics course
+will not find anything new - this is more for amateur or younger
+programmers who haven't been blessed by university training
+(yeah, right).
+
+The program itself isn't very fast, since it was written for
+demonstration purposes rather than real utility.  You can use
+these same techniques for useful programs, but you would want to
+optimize the routines a bit.  Incidentally, I originally wrote
+this program on an Iris workstation, on which it was pretty close
+to real-time, so those of you who think of the Amiga as a
+workstation might want to think twice.
+
+In case you want to contact me, I am:
+
+Patrick Quaid
+8320 E. Redwing
+Scottsdale, AZ 85250
+USA
+
+Telephone: (602) 967-3356
+FidoNet: Patrick Quaid @ 1:114/52
+
+
+=============================================================
+
+
+
+Shade.c is a program that displays 3D shaded objects.  The
+technique it uses is very general, although the program itself is
+not very fast.
+
+The program is invoked like:
+
+    Shade ObjectDef
+
+...where ObjectDef is a text file describing the object, in a
+format similar to the BYU definition (I'll describe it further
+later on).
+
+The display is controlled by several variables in the program,
+variables which at this point aren't modifiable from the command
+line.  They are:
+
+    FromThis defines the point the "camera" sits at,
+in world coordinates.
+    AtThis defines the point the camera is aimed
+at, the target point.  It can be any point at
+all, but it can't be the same as the From
+point.
+    UPThis is a vector which defines the direction
+we want to consider up.  It can be anything
+at all, with one restriction: it can't be
+colinear with the line through From and At.
+    LightThis point defines the position of the light
+source, which can be anywhere.
+
+The program also lets you set the field of view, in this case
+specified in degrees (it's the same for the horizontal as well as
+the vertical, although it doesn't have to be).  Using a large
+angle for the field of view, say 150 degrees, gives you a fish-
+eye view.  Objects that are close are _really_ close, and objects
+that are not close are _really_ far away.  Using a small value
+like 50 has the same effect as using a telephoto lens: it
+minimizes the distinction between near and far objects.
+
+
+This program works by converting the right-handed world
+coordinates in which the object is defined into left-handed view
+coordinates, which are really easy to display.  Then it figures
+out how bright each face should be, based on its attitude toward
+the light source, and draws them in a shade of red.
+
+View coordinates are designed to be easy to draw (hence the
+name).  In view coordinates, the x axis points along the
+horizontal, to the right.  The y axis points along the vertical,
+straight up.  The z axis points straight away from you,
+perpendicular to the other two axes.  This is all somewhat
+arbitrary, but it's also quite common.  In order to make the
+object as easy as possible to draw, the Shade program converts
+the world coordinates in a way that moves the world From point to
+the origin, moves the world At point to somewhere on the positive
+z axis, and twirls everything around until the world UP vector is
+in the yz plane.
+
+To convert world coordinates into view coordinates, we use a
+matrix multiplication.  You don't really _need_ to understand how
+the matrix works, so if you really want to, you can skip the next
+few paragraphs.
+
+I use 3x3 matrix multiplications rather than the more general 4x4
+ones, since the only advantage of 4x4's is that they can also
+handle translations (moving a point in space).  That's no big
+deal in most cases - you can just add or subtract the three
+offsets directly.  3x3 matrices use 9 multiplications vs. 16 for
+the 4x4's, so it more than makes up for it.
+
+Back to the amazing matrix.  First of all, think of the
+transformation matrix as three 1x3 vectors called a, b and c
+stacked like a layer cake:
+
+		[ a1  a2  a3 ]
+          [ b1  b2  b3 ]
+          [ c1  c2  c3 ]
+
+Imagine that you want to convert the view coordinate [0 0 1] to
+its world counterpart (I realize that's the opposite of what we
+want, but bear with me).  If you do the multiplication you'll
+see that the result is just the vector c.  Now think about what
+[0 0 1] represents in view coordinates -- it's a unit vector
+(i.e. it's one unit long) pointing along the positive z axis. 
+The line of sight, in other words.  Therefore c should be a unit
+vector pointing along the line of sight in the world system,
+which is just the vector from the From point toward At.  One
+down, two to go.
+
+Now look at the view coordinate [1 0 0].  It's just a unit
+vector pointing straight to the right, right?  The result of the
+multiplication is the vector a, so a should point straight to the
+right in world coordinates.  That means it's perpendicular to the
+line of sight (which we just figured out), and also perpendicular
+to the UP vector.  No problem -- we just take the cross product
+of c and UP.  The cross product, you see, takes two vectors and
+returns a third vector that's perpendicular to them.  That'll
+come in handy later.
+
+We're really on a roll, so look at the view coordinate [0 1 0], a
+unit vector pointing straight up which will be represented by b
+in world coordinates.  You might be tempted to say that b and UP
+are the same thing, but that would mean that UP always had to be
+perpendicular to the line of sight, which would be a pain to keep
+track of.  Instead, just calculate b by taking the cross product
+of a and c.  That gives us a lot of freedom in specifying UP --
+it just has to have a component, any at all, perpendicular to the
+line of sight.
+
+So that's what the transformation matrix looks like.  Well
+almost, because that matrix converts points from view coordinates
+to world coordinates, but we want the reverse.  To be more
+precise, we want the inverse.  Inverses are generally pretty
+difficult to come by.  Not in this case, however, because this
+little matrix falls into the category of transformation
+matrices, all of whose inverses are the same as their transposes
+(i.e. the matrix flipped over its upper-left to lower-right
+diagonal).  So if you just rearrange the matrix you're finished
+after all.
+
+Once you have view coordinates, you have to convert them into 2D
+display coordinates.  In the program, the routine Calculate_V()
+creates the transformation matrix using the From, At and UP
+values.  Compute_Display_Coords() applies the matrix to each of
+the world points to get view coordinate points.  It then converts
+view coordinates to display points using two scaling factors
+MultX and MultY.  These values play several roles.  First of all,
+they scale the coordinates from, say, -1 to 1 up to -100 to 100,
+or whatever.  MultX also corrects for the screen aspect ratio
+(non-square pixels), so that circles in the data become circles
+on the screen.  In doing so it uses the assumption that a low
+resolution screen (320 by 200) has more or less square pixels.
+
+The multipliers quietly take care of the field of view as well. 
+Picture the field of view as a triangle with one vertex at the
+From point, a little like this:
+
+
+             \
+              \
+              |\
+              | \
+              |  \
+            --+--->From
+              |  /
+              | /
+              |/
+              /
+             /
+
+
+You can see that at any given distance from the From point, the
+length of the vertical line in that picture is going to be
+proportional to the tangent of the viewing angle, or actually
+half the viewing angle.  See why?  The angle at the plus sign is
+a right angle, so the tangent near the > sign is the ratio of the
+opposite side (the vertical line) to the adjacent side (the line
+of sight).  The program uses that fact to adjust MultX and MultY
+to scale the coordinates.
+
+
+
+
+So far, so good.  This nifty world coordinate system provides the
+freedom to arrange the display any way you like.  So now you need
+to draw solid-color faces, in this case using the Amiga's built-
+in area drawing routines.
+
+First of all, the program has to figure out which faces _not_ to
+draw.  If you just drew all the faces, it would look awful, since
+distant faces would be drawn in front of nearer ones, and in some
+cases completely obscure them.  This is known as the hidden
+surface problem.
+
+There are many ways to handle the hidden surface problem.  One
+way is to pretend the problem doesn't exist.  You do that by
+making it clear that your program only draws convex objects, like
+boxes and balls.  Convex, in this case, means that for any two
+points on the object, the line connecting them does not go
+outside the object.  As long as you're drawing convex objects,
+all you have to do is figure out whether the outside of the face
+is visible to the camera at the From point.  If it is, we can
+draw it immediately, because the convexity of the object ensures
+that there can't be any other faces in the way.
+
+So how do you decide whether the outside of the polygon is facing
+the camera?  First, you calculate the unit outer normal of the
+face.  A "normal" is a vector that is perpendicular to a plane,
+in this case the polygon we want to draw.  It can point inward or
+outward, but we only want the outer normal.  You can calculate a
+normal by taking the cross product of two edges of the polygon. 
+These edges, in turn, are defined by any three points of the
+polygon.  But here's where it gets a bit tricky -- if you just
+take three points at random, you won't know whether the normal
+points inward or outward.  You need some consistency, so the
+Shade program uses the following rule: the vertices of each face
+are ordered counter-clockwise, as viewed from the outside, in the
+object definition file.
+
+Once you have the unit outer normal, you need to figure out if it
+points toward the camera or away from it.  To do that, first
+define a vector called Back that points from the center of the
+face toward the From point.  If the angle between Back and Normal
+is between -90 and 90 degrees, you can see the front of the face. 
+As long as both Normal and Back are unit vectors, their dot
+product will return the cosine of the angle between them.  Since
+the cosine is positive for angles between -90 and 90 degrees, you
+just check the sign of the dot product to determine whether the
+polygon faces you.
+
+Why that works: the dot product is a wierd operation that looks
+like this:
+
+    a . b = |a| |b| cos v
+
+...where |a| is just the length of the vector a, |b| is the
+length of b, and v is the angle between them.  Now you can see
+why, if |a| and |b| are both 1, the dot product returns the
+cosine.  The reason this is useful is because you can also figure
+out the dot product as:
+
+    a . b = a1 * b1 + a2 * b2 + a3 * b3
+
+
+The convex object method isn't very useful, because most of the
+fun things in life (people, cars, spaghetti, etc) are not convex. 
+A somewhat better method is to sort the faces according to their
+distance from the camera position, then draw the faces from the
+farthest to the nearest.  That way closer faces will naturally
+cover up farther ones.
+
+The obvious disadvantage of the face-sorting method is speed. 
+Not only do you have to figure out the distance for each point,
+but you then have to sort them.  A more important problem appears
+when you try to draw overlapping faces.  Imagine, for example,
+that you are looking at the letter X from the side.  You would
+expect to see the top half of one face, and the bottom half of
+the other.  What you would actually see is a single face, since
+this method only draws full polygons.  You could, of course, just
+outlaw overlapping faces, but that's an additional restriction.
+
+Another problem with the face-sorting method is that it's not
+really possible to calculate a perfect distance.  If, for
+example, you have a very large face that is nearly horizontal, as
+well as a small face that is between the From point and the
+larger face, the larger face might nonetheless by drawn in front
+because its center is closer.  The solution to this problem: use
+reasonably small faces, hope it doesn't happen too often, and
+hope that it's not too noticable when it does happen.
+
+The best solution to the hidden surface problem, the z-buffer, is
+also the easiest to implement.  What you do, you see, is get
+yourself a two dimensional array with one value for each pixel
+you intend to display.  Then each time you draw a pixel, any
+pixel, you store its z coordinate in the z-buffer.  But if the
+pixel already has a lower z-buffer value (i.e. it's closer to the
+screen), you skip it.  Nothing could be simpler.  It's so simple,
+in fact, that any graphics workstation worth the name has a z-
+buffer implemented in hardware.  The method has two major
+drawbacks.  First of all, it takes a huge amount of memory (128k
+for a 16-bit buffer on a 320 by 200 screen.  Workstations
+typically have screens 1024 pixels on a side, so that's two
+Megs!).  Second, unless it's handled by the hardware it's not
+very fast.  Someday the Amiga will have z-buffer hardware, you
+mark my words.
+
+Shade actually uses two of these methods.  Yes, that's as
+inefficient as it sounds.  First of all, it uses the face sorting
+method.  The problem with the face-sorting method is that some
+inside faces of the object will show through at the edges -- the
+area fill routines are occasionally one pixel off along the
+borders.  These borders tend to have drastically different
+colors, so the ShowObject() routine also checks to see if the
+polygon faces the From position.  Most of the work has to be done
+anyway, to figure out the face's color.
+
+
+
+
+Since the program now knows what to draw, and where, the only
+remaining question is what color to use.
+
+Shade uses the very simple Phong lighting model, which draws each
+face in a single, solid color.  The Phong lighting model says
+that the color of a polygon depends on three components, called
+the ambient, diffuse, and specular light.  Ambient light is easy
+to understand -- it's the minimum amount of light that will fall
+on a polygon.  In the real world, light enters a room and bounces
+off all the chairs, walls, and whatever until there's a little
+bit of light everywhere; the shadows aren't utterly black.  In
+space, on the other hand, there's not much stuff to bounce the
+light around, so shadows are pretty close to black.  Shade uses
+a variable called Ambient that scales this component of the
+light.
+
+The diffuse component is caused by light that strikes an object,
+then scatters in all directions equally.  This is typical of
+matte surfaces, like paper.  If you hold a piece of paper at a
+fixed angle relative to a light, you can look at the page from
+any position and it'll have pretty close to the same brightness. 
+You can use Lambert's law to calculate the diffuse component. 
+First of all, you need to define a unit vector L that points from
+the center of the polygon toward the light.  Lambert's law says
+that the brightness of the face will vary in proportion to the
+cosine of the angle between L and the normal.  Think about it:
+when the normal and the L vector are nearly the same, the face is
+directly in the light, and the cosine is close to 1.  When the
+normal is closer to 90 degrees away from L, the cosine is closer
+to 0.  Some folks will tell you that this brightness should be
+divided by the total distance the light has to travel (light
+source to polygon to camera position), but Newton says it should
+be divided by the square of the distance.  I'll let them fight
+about it, and in the meantime Shade ignores the distance
+entirely -- you don't want the display to be too sensitive to the
+particular light position.
+
+As I mentioned above, there's an easy way to find the cosine of
+the angle between two unit vectors, and that's the dot product. 
+Thus Shade calculates the diffuse component of the color by
+multiplying the dot product of L and Normal by a scaling
+variable called Diffuse.
+
+Specular light is glare.  The light bounces straight off the
+polygon into your eyeballs.  The specular component, therefore,
+takes on the color of the light source, unlike the ambient and
+diffuse components, which take on the color of the face itself. 
+To figure out the specular component, you first define a unit
+vector called Back that points from the center of the polygon to
+toward the From point.  You also use the reflection of L, which
+then points from the center of the polygon out toward the Light
+point.  The angle b is the angle between the Back vector and the
+reflection of L.  It is used in the following formula:
+
+                  i
+           I = cos (b)
+
+This means that the intensity I is just the cosine of b, to the
+power of i, which is an arbitrary integer.  High values for i,
+say 200, will cause the glare area to be smaller and sharper than
+lower values.
+
+Shade doesn't use the specular component for two reasons. 
+First, specular light takes on the color of the light source. 
+That wouldn't be a problem if Shade specified colors directly,
+using HAM mode or RGB values -- you could just add the specular
+component to the other two.  I didn't want to write my own
+polygon filling routine, however, so Shade uses color registers
+instead of HAM mode.  Therefore, there aren't enough colors to
+really make it useful.
+
+The second reason I skipped it is that it doesn't look very
+impressive for single-color polygons, since glare areas typically
+should be much smaller than the whole polygon.  Again, if I was
+willing to write my own area-fill routines I could do some
+fancier stuff.  In spite of all this, Shade has the code for
+computing the specular component in the routine ShowObject(). 
+Commented out, of course.
+
+I mentioned above that Shade just uses a single color for each
+face.  That makes the object look faceted, like a gem, which
+looks terrific if you happen to be drawing gems.  What are the
+alternatives?  You could use something called Gouraud shading. 
+To do that, you figure out the normals for each vertex by
+averaging the normals of each of the adjacent faces.  Then you
+assign the appropriate color to each of these vertices, using the
+normal and the formulae above.  Finally you fill in each face,
+deriving the color of each pixel from its proximity to the
+vertices.  In other words, you interpolate the colors across the
+face.  Again, you need lots of colors, which the Amiga doesn't
+have, and specialized area-fill routines, which I didn't want to
+write.
+
+If you thought that was tough, hang on to your hat.  Since Shade
+uses the Phong lighting model, I might as well mention Phong
+shading.  In this method, you calculate the normals at each
+vertex just as you did with the Gouraud method.  Then when you go
+to fill in the polygon, you figure out what the normal should be
+at each pixel, based on its proximity to each of the vertices. 
+In other words, you interpolate the normals across the face. 
+Once you get the normal, you calculate a color using the
+procedure outlined above.  Needless to say, Phong shading is slow
+but produces really impressive images.
+
+
+
+Shade reads an object definition from the disk and displays it
+in a double buffered window.  Then it rotates the From point
+around the object so you can see it from all around.  It doesn't
+change the At or Light positions, the UP vector or the field of
+view, so you can see that the program is not exactly flexing its
+muscles.  To get a feel for the relationship between the
+variables, you might want to modify the program to vary different
+ones.  The program is written in C using DICE version 2.06.19R,
+but it should be easily portable among compilers.
+
+The first thing the program does is open up a couple of screens
+using OpenDisplay().  It uses these screens to create a double-
+buffered effect, to hide the drawing going on in the background. 
+Next, the program reads the object definition file using the
+routine ReadObjectFile().  The data are formatted much like the
+reasonably common BYU format.  The first number is the total
+number of points and the second is the total number of faces. 
+The third number gives the total number of vertices that will be
+used to define all the faces.  If you use the same number of
+points for each face, this number is just TotalFaces * (vertices
+per face).
+
+After those three values come the actual data points, specified
+as the triple x, y and z.  Since my copy of DICE does not yet
+support scanf("%f"), these values are all multiplied by 10000. 
+Last come the face definitions.  Each face is specified by a
+series of vertices.  As noted above, the vertices should be
+ordered counter-clockwise, as viewed from the outside.  The last
+vertex in each face is specified as a negative number, which
+allows you to use any number of points to define each face. 
+Remember that all the points in a face should be coplanar -- in
+other words, the face should be flat.  Also, the first three
+points (the ones used to calculate the normal) should not be
+colinear.  Finally, note that the vertices are numbered starting
+at one, not zero.
+
+Having read all this information and allocated the appropriate
+memory, the program defines some reasonable values for the
+control variables.  The At point is positioned at the center of
+the object's "bounding box," the box formed by the maximum and
+minimum values on each axis.  The From point is positioned along
+the x axis, far enough away to display the entire bounding box. 
+UP is defined as the positive z axis, and the field of view is
+set to 100 degrees.  These are all totally arbitrary, of course,
+and you should try different values to see their effects.
+
+Once everything is initialized, the program enters its main loop. 
+It first recalculates the transformation matrix V, then uses it
+to calculate new display positions for each world coordinate.  
+The program then draws the object.  When the program draws a
+face, it uses the lighting techniques mentioned above to come up
+with a brightness, or intensity, from 0 to 60.  This value is
+mapped onto a red scale, and dithering patterns are used to
+increase the apparent number of colors from 15 to 60.  The Amiga
+area drawing routines will crash if you try to draw a polygon
+that is larger than the TmpRas you specify, so Shade.c takes some
+pains to make sure each face will fit.  It then calls the area
+routines to actually display the face.
+
+In the main loop, the program rotates the From point around the
+At point in the xy plane, so you can see your object from all
+around.
+
+
+
+All the information this program uses is reasonably well known,
+and none of it, I hasten to add, was invented by me.  You might
+want to look through these books:
+
+Fundamentals of Interactive Computer Graphics, by Foley and van
+Dam.
+
+Computer Graphics, by Hearn and Baker.
+
+...especially the first one.  You might also want to skim through
+SIGGRAPH titles, some of which are hopelessly obscure, while
+others are really interesting.

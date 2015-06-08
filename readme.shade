@@ -1,0 +1,37 @@
+
+Shade.c - a demonstration of common 3D routines for
+          transformation world coordinates and Phong
+          shading.
+
+
+To see what Shade does, run it as follows:
+
+    Shade ObjectDefinition
+
+...where ObjectDefinition is one of the .data files
+included in the archive.  Press a key or click a mouse
+button to end the program.
+
+
+The files included here are:
+
+  Shade.c     - A program that displays 3D objects with
+                solid colors.
+  Shade       - An executable version of the program.
+  Shade.doc   - A file describing all the techniques the
+                program uses.
+
+  Hemi.data   - An object definition that's just half
+                a sphere.
+  2Hemi.data  - Two hemispheres sitting next to each
+                other.
+  Sphere.data - Two hemispheres put together.
+  Blimp.data  - A Sphere streched out like a cartoon
+                blimp.
+  Prize.data  - A slightly loopy, but still recognizable,
+                space ship.
+
+
+
+Read the .doc file for much more information
+
